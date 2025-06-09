@@ -1,5 +1,3 @@
-# MusicGenreClassifier.py
-
 import streamlit as st
 import librosa
 import librosa.display
@@ -7,18 +5,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import joblib
 import io
-from pydub import AudioSegment
 import time
+from pydub import AudioSegment
 
 st.set_page_config(page_title="Trasetone", layout="wide")
-
 st.title("🎶 Trasetone: Genre & Mood Classifier")
 
-# Sidebar – Upload audio
+# Sidebar upload
 st.sidebar.header("📁 Upload Audio")
-audio_file = st.sidebar.file_uploader("Choose an MP3 or WAV file", type=["mp3", "wav"])
+audio_file = st.sidebar.file_uploader("Upload MP3 or WAV", type=["mp3", "wav"])
 
-# Preprocessing
+# --- Preprocessing ---
 def preprocess_audio(file):
     if file.type == 'audio/mp3':
         audio = AudioSegment.from_mp3(file)
@@ -31,7 +28,7 @@ def preprocess_audio(file):
     y = librosa.util.normalize(y)
     return y, sr
 
-# Feature extraction
+# --- Feature extraction ---
 def extract_features(y, sr):
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
@@ -46,22 +43,36 @@ def extract_features(y, sr):
         zcr.mean(),
         tempo
     ])
-    return feature_vector, mfcc
+    return feature_vector, mfcc, chroma
 
-# Visualize MFCC
-def plot_mfcc(mfcc):
-    fig, ax = plt.subplots(figsize=(10, 4))
-    librosa.display.specshow(mfcc, x_axis='time', cmap='magma')
-    plt.colorbar()
-    plt.title('MFCC Features')
+# --- Visualizations ---
+def plot_waveform(y, sr):
+    fig, ax = plt.subplots(figsize=(10, 3))
+    librosa.display.waveshow(y, sr=sr, alpha=0.6)
+    ax.set_title("📈 Waveform")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Amplitude")
     st.pyplot(fig)
 
-# Load model
+def plot_chroma(chroma):
+    fig, ax = plt.subplots(figsize=(10, 3))
+    librosa.display.specshow(chroma, y_axis='chroma', x_axis='time', cmap='coolwarm')
+    ax.set_title("🎹 Chroma Spectrogram")
+    st.pyplot(fig)
+
+def plot_mfcc(mfcc):
+    fig, ax = plt.subplots(figsize=(10, 3))
+    librosa.display.specshow(mfcc, x_axis='time', cmap='magma')
+    plt.colorbar()
+    ax.set_title("📊 MFCC")
+    st.pyplot(fig)
+
+# --- Load Model ---
 @st.cache_resource
 def load_model():
     return joblib.load("genre_mood_classifier.pkl")
 
-# Label decoder (optional)
+# --- Decode Label ---
 def decode_label(index):
     try:
         encoder = joblib.load("genre_mood_label_encoder.pkl")
@@ -69,7 +80,7 @@ def decode_label(index):
     except:
         return f"Label #{index}"
 
-# Recommender
+# --- Recommender ---
 def recommend_songs(label):
     return {
         "Pop-Happy": ["Blinding Lights", "Levitating", "Uptown Funk"],
@@ -78,30 +89,31 @@ def recommend_songs(label):
         "EDM-Energetic": ["Levels", "Animals", "Titanium"]
     }.get(label, ["No recommendations available."])
 
-# Main App Logic
+# --- App Logic ---
 if audio_file:
     st.audio(audio_file, format="audio/wav")
     y, sr = preprocess_audio(audio_file)
 
-    st.subheader("📊 Audio Visualization")
-    _, mfcc = extract_features(y, sr)
+    st.subheader("🎼 Audio Visualizations")
+    feature_vec, mfcc, chroma = extract_features(y, sr)
+    plot_waveform(y, sr)
+    plot_chroma(chroma)
     plot_mfcc(mfcc)
 
-    st.subheader("🎧 Prediction")
+    st.subheader("🎧 Genre & Mood Prediction")
     start = time.time()
-    features, _ = extract_features(y, sr)
     model = load_model()
-    prediction_encoded = model.predict([features])[0]
+    prediction_encoded = model.predict([feature_vec])[0]
     end = time.time()
 
-    # Decode label
     prediction_label = decode_label(prediction_encoded)
-    st.success(f"🎼 Predicted Genre & Mood: **{prediction_label}**")
-    st.caption(f"🕒 Processed in {end - start:.2f} seconds")
+    st.success(f"🎼 Detected: **{prediction_label}**")
+    st.caption(f"🕒 Inference Time: {end - start:.2f} seconds")
 
-    st.subheader("🎵 Recommendations")
+    st.subheader("🎵 Recommended Songs")
     for song in recommend_songs(prediction_label):
         st.markdown(f"- {song}")
 
+# Footer
 st.markdown("---")
-st.caption("Developed by Group 2 – Trasetone · 2025")
+st.caption("Developed by Group 2 – Trasetone Project – 2025")
